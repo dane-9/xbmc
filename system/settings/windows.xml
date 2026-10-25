@@ -17,6 +17,22 @@
       </group>
     </category>
   </section>
+  <section id="player">
+    <category id="videoplayer">
+      <group id="3">
+        <setting id="videoplayer.dolbyvisionoutput" type="boolean" label="39220" help="39221">
+          <dependencies>
+            <dependency type="visible">
+              <condition on="property" name="supportsdolbyvision" />
+            </dependency>
+          </dependencies>
+          <level>2</level>
+          <default>false</default>
+          <control type="toggle" />
+        </setting>
+      </group>
+    </category>
+  </section>
   <section id="system">
     <category id="audio">
       <group id="1">

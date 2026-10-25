@@ -9,4 +9,9 @@ set(HEADERS DeviceResources.h
             RenderSystemDX.h
             ScreenshotSurfaceWindows.h)
 
+if(CORE_SYSTEM_NAME STREQUAL windows)
+  list(APPEND SOURCES DolbyVisionOutput.cpp)
+  list(APPEND HEADERS DolbyVisionOutput.h)
+endif()
+
 core_add_library(rendering_dx)

@@ -9,6 +9,7 @@
 #include "WinSystemWin32DX.h"
 
 #include "commons/ilog.h"
+#include "rendering/dx/DolbyVisionOutput.h"
 #include "rendering/dx/RenderContext.h"
 #include "settings/DisplaySettings.h"
 #include "settings/Settings.h"
@@ -404,6 +405,17 @@ HRESULT APIENTRY HookOpenAdapter10_2(D3D10DDIARG_OPENADAPTER *pOpenData)
 bool CWinSystemWin32DX::IsHDRDisplay()
 {
   return (CWIN32Util::GetWindowsHDRStatus() != HDR_STATUS::HDR_UNSUPPORTED);
+}
+
+CHDRCapabilities CWinSystemWin32DX::GetDisplayHDRCapabilities() const
+{
+  CHDRCapabilities capabilities;
+  MONITORINFOEXW monitor{};
+  monitor.cbSize = sizeof(monitor);
+  if (GetMonitorInfoW(MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &monitor) &&
+      DX::CDolbyVisionOutput::IsSupportedDisplay(monitor.szDevice))
+    capabilities.SetDolbyVision();
+  return capabilities;
 }
 
 HDR_STATUS CWinSystemWin32DX::GetOSHDRStatus()

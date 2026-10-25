@@ -46,10 +46,31 @@ protected:
   void UpdateVideoFilters() override;
   CRenderBuffer* CreateBuffer() override;
   static bool IsHWPicSupported(const VideoPicture& picture);
+#if defined(TARGET_WINDOWS_DESKTOP)
+  void FinalOutput(CD3DTexture& source,
+                   CD3DTexture& target,
+                   const CRect& sourceRect,
+                   const CPoint (&destPoints)[4]) override;
+  /*!
+   * \brief Whether the Dolby Vision output can take a picture.
+   */
+  static bool IsDolbyVisionOutputPicture(const VideoPicture& picture,
+                                         AVPixelFormat format,
+                                         float fps);
+#endif
 
 private:
   static AVColorPrimaries GetSrcPrimaries(AVColorPrimaries srcPrimaries, unsigned int width, unsigned int height);
   DXGI_FORMAT CalcIntermediateTargetFormat() const;
+#if defined(TARGET_WINDOWS_DESKTOP)
+  // false when the output was refused and the picture is rendered normally
+  bool RenderDolbyVisionOutput();
+  void ReleaseDoviTunnel();
+
+  std::unique_ptr<class CDoviTunnel> m_doviTunnel;
+  CD3DTexture m_doviTunnelSurface; // the carrier frame
+  bool m_doviTunnelCandidate = false;
+#endif
 #if defined(TARGET_WINDOWS_STORE)
   bool RenderDolbyVision(CD3DTexture& target, CRenderBuffer* buf);
   void DisableDolbyVisionEffect(const char* reason);

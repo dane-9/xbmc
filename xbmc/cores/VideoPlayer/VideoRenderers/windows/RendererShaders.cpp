@@ -12,6 +12,11 @@
 #if defined(TARGET_WINDOWS_STORE)
 #include "DolbyVisionEffect.h"
 #endif
+#if defined(TARGET_WINDOWS_DESKTOP)
+#include "Interface/TimingConstants.h"
+#include "dolby/DoviTunnel.h"
+#include "rendering/dx/DeviceResources.h"
+#endif
 #include "rendering/dx/RenderContext.h"
 #include "utils/CPUInfo.h"
 #if !defined(_M_ARM) && !defined(_M_ARM64)
@@ -123,16 +128,50 @@ void CRendererShaders::GetWeight(std::map<RenderMethod, int>& weights, const Vid
   }
 #endif
 
+#if defined(TARGET_WINDOWS_DESKTOP)
+  // the Dolby Vision output is only implemented in this renderer
+  const float fps =
+      picture.iDuration > 0 ? static_cast<float>(DVD_TIME_BASE / picture.iDuration) : 0.0f;
+  if (IsDolbyVisionOutputPicture(picture, av_pixel_format, fps))
+    weight += 2000;
+#endif
+
   if (weight > 0)
     weights[RENDER_PS] = weight;
 }
+
+#if defined(TARGET_WINDOWS_DESKTOP)
+bool CRendererShaders::IsDolbyVisionOutputPicture(const VideoPicture& picture,
+                                                  AVPixelFormat format,
+                                                  float fps)
+{
+  const DoviRpu* rpu = picture.doviRpu.get();
+  return rpu && picture.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION &&
+         format == AV_PIX_FMT_D3D11VA_VLD && GetDXGIFormat(picture) == DXGI_FORMAT_P010 &&
+         IsDolbyVisionTunnelMetadata(rpu->metadata.data(), rpu->metadata.size(), rpu->profile,
+                                     rpu->compatibilityId) &&
+         DX::DeviceResources::Get()->GetDolbyVisionOutput().CanEnable(picture.iWidth,
+                                                                      picture.iHeight, fps);
+}
+
+void CRendererShaders::ReleaseDoviTunnel()
+{
+  m_doviTunnel.reset();
+  m_doviTunnelSurface.Release();
+}
+#endif
 
 CRendererShaders::CRendererShaders(CVideoSettings& videoSettings) : CRendererHQ(videoSettings)
 {
   m_renderMethodName = "Pixel Shaders";
 }
 
-CRendererShaders::~CRendererShaders() = default;
+CRendererShaders::~CRendererShaders()
+{
+#if defined(TARGET_WINDOWS_DESKTOP)
+  DX::DeviceResources::Get()->GetDolbyVisionOutput().SetCandidate(false);
+#endif
+}
 
 bool CRendererShaders::Supports(ESCALINGMETHOD method) const
 {
@@ -144,6 +183,33 @@ bool CRendererShaders::Supports(ESCALINGMETHOD method) const
 
 bool CRendererShaders::Configure(const VideoPicture& picture, float fps, unsigned orientation)
 {
+#if defined(TARGET_WINDOWS_DESKTOP)
+  // decided before the base class switches Windows HDR, which the Dolby Vision output leaves off
+  bool tunnelCandidate = picture.videoBuffer && orientation == 0 &&
+                         IsDolbyVisionOutputPicture(picture, picture.videoBuffer->GetFormat(), fps);
+  if (tunnelCandidate)
+  {
+    const DX::CDolbyVisionOutput::OutputMode mode =
+        DX::CDolbyVisionOutput::SelectedMode(picture.iWidth, picture.iHeight, fps);
+    ComPtr<ID3D11Device> device = DX::DeviceResources::Get()->GetD3DDevice();
+    m_doviTunnel = std::make_unique<CDoviTunnel>();
+    tunnelCandidate = device && m_doviTunnel->Initialize(device.Get()) &&
+                      m_doviTunnelSurface.Create(mode.width, mode.height, 1, D3D11_USAGE_DEFAULT,
+                                                 DXGI_FORMAT_B8G8R8A8_UNORM) &&
+                      (!DolbyVisionMetadataNeedsComposer(picture.doviRpu->metadata.data(),
+                                                         picture.doviRpu->metadata.size()) ||
+                       m_doviTunnel->CanCompose());
+  }
+  if (!tunnelCandidate)
+    ReleaseDoviTunnel();
+  m_doviTunnelCandidate = tunnelCandidate;
+  DX::DeviceResources::Get()->GetDolbyVisionOutput().SetCandidate(tunnelCandidate, fps,
+                                                                  picture.iWidth, picture.iHeight);
+  if (tunnelCandidate)
+    CLog::Log(LOGINFO, "Dolby Vision tunnel: renderer armed for Profile {} at {}x{} {:.3f} fps",
+              picture.doviRpu->profile, picture.iWidth, picture.iHeight, fps);
+#endif
+
   if (__super::Configure(picture, fps, orientation))
   {
     m_format = picture.videoBuffer->GetFormat();
@@ -184,11 +250,20 @@ bool CRendererShaders::Configure(const VideoPicture& picture, float fps, unsigne
     CreateIntermediateTarget(m_sourceWidth, m_sourceHeight, false, intermediateFormat);
     return true;
   }
+
+#if defined(TARGET_WINDOWS_DESKTOP)
+  DX::DeviceResources::Get()->GetDolbyVisionOutput().SetCandidate(false);
+#endif
   return false;
 }
 
 void CRendererShaders::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint(&destPoints)[4], uint32_t flags)
 {
+#if defined(TARGET_WINDOWS_DESKTOP)
+  if (m_doviTunnelCandidate && RenderDolbyVisionOutput())
+    return;
+#endif
+
   if (!m_colorShader)
     return;
 
@@ -221,6 +296,45 @@ void CRendererShaders::RenderImpl(CD3DTexture& target, CRect& sourceRect, CPoint
   if (!HasHQScaler())
     ReorderDrawPoints(CRect(destPoints[0], destPoints[2]), destPoints);
 }
+
+#if defined(TARGET_WINDOWS_DESKTOP)
+bool CRendererShaders::RenderDolbyVisionOutput()
+{
+  DX::CDolbyVisionOutput& output = DX::DeviceResources::Get()->GetDolbyVisionOutput();
+  if (!output.IsCandidate())
+  {
+    CLog::Log(LOGWARNING, "Dolby Vision tunnel: output refused; rendering the base layer with "
+                          "Kodi's regular renderer.");
+    m_doviTunnelCandidate = false;
+    ReleaseDoviTunnel();
+    return false;
+  }
+
+  auto* buf = dynamic_cast<CRenderBufferImpl*>(m_renderBuffers[m_iBufferIndex]);
+  if (!buf)
+    return true;
+  ComPtr<ID3D11Resource> resource;
+  ComPtr<ID3D11Texture2D> decoded;
+  unsigned slice = 0;
+  if (SUCCEEDED(buf->GetResource(&resource, &slice)))
+    resource.As(&decoded);
+  m_doviTunnel->SetScalingMethod(m_videoSettings.m_ScalingMethod);
+  if (m_doviTunnel->Render(*buf, m_sourceWidth, m_sourceHeight, decoded.Get(), slice,
+                           m_doviTunnelSurface))
+    output.SetFrame(m_doviTunnelSurface.Get(), [this](ID3D11Texture2D* gui, ID3D11Texture2D* frame)
+                    { return m_doviTunnel && m_doviTunnel->CompositeGUI(gui, frame); });
+  return true;
+}
+
+void CRendererShaders::FinalOutput(CD3DTexture& source,
+                                   CD3DTexture& target,
+                                   const CRect& sourceRect,
+                                   const CPoint (&destPoints)[4])
+{
+  if (!m_doviTunnelCandidate)
+    __super::FinalOutput(source, target, sourceRect, destPoints);
+}
+#endif
 
 #if defined(TARGET_WINDOWS_STORE)
 void CRendererShaders::DisableDolbyVisionEffect(const char* reason)

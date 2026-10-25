@@ -370,6 +370,11 @@ bool CRenderSystemDX::ClearBuffers(KODI::UTILS::COLOR::Color color)
   if (!m_bRenderCreated)
     return false;
 
+#if defined(TARGET_WINDOWS_DESKTOP)
+  if (m_deviceResources->GetDolbyVisionOutput().IsCandidate())
+    color = 0;
+#endif
+
   float fColor[4];
   CD3DHelper::XMStoreColor(fColor, color);
   ID3D11RenderTargetView* pRTView = m_deviceResources->GetBackBuffer().GetRenderTarget();

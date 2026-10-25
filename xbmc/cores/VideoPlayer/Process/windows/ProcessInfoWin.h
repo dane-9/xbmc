@@ -22,6 +22,8 @@ public:
 
   EINTERLACEMETHOD GetFallbackDeintMethod() override;
   std::vector<AVPixelFormat> GetRenderFormats() override;
+  bool WantsDolbyVisionRpu() override;
+  bool WantsDolbyVisionEnhancementLayer() override;
 };
 
 }

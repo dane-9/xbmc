@@ -99,6 +99,10 @@ DX::DeviceResources::~DeviceResources() = default;
 
 void DX::DeviceResources::Release()
 {
+#ifdef TARGET_WINDOWS_DESKTOP
+  m_dolbyVisionOutput.Reset();
+#endif
+
   if (!m_bDeviceCreated)
     return;
 
@@ -654,6 +658,14 @@ void DX::DeviceResources::ResizeBuffers()
     else if (use10bitSetting == 2)
       use10bit = true;
 
+    bool dolbyVisionCarrier = false;
+#ifdef TARGET_WINDOWS_DESKTOP
+    // the Dolby Vision carrier frames are 8-bit RGB and must reach the display unchanged
+    dolbyVisionCarrier = m_dolbyVisionOutput.UsesCarrierSwapChain();
+    if (dolbyVisionCarrier)
+      use10bit = false;
+#endif
+
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
     swapChainDesc.Width = lround(m_outputSize.Width);
     swapChainDesc.Height = lround(m_outputSize.Height);
@@ -662,6 +674,8 @@ void DX::DeviceResources::ResizeBuffers()
     swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 #ifdef TARGET_WINDOWS_DESKTOP
     swapChainDesc.BufferCount = 6; // HDR 60 fps needs 6 buffers to avoid frame drops
+    if (dolbyVisionCarrier)
+      swapChainDesc.Scaling = DXGI_SCALING_NONE;
 #else
     swapChainDesc.BufferCount = 3; // Xbox don't like 6 backbuffers (3 is fine even for 4K 60 fps)
 #endif
@@ -944,6 +958,10 @@ void DX::DeviceResources::OnDeviceRestored()
 // Recreate all device resources and set them back to the current state.
 void DX::DeviceResources::HandleDeviceLost(bool removed)
 {
+#ifdef TARGET_WINDOWS_DESKTOP
+  m_dolbyVisionOutput.Reset();
+#endif
+
   bool backbuferExists = m_backBufferTex.Get() != nullptr;
 
   OnDeviceLost(removed);
@@ -992,6 +1010,14 @@ bool DX::DeviceResources::Begin()
 
   m_deferrContext->OMSetRenderTargets(1, m_backBufferTex.GetAddressOfRTV(), m_d3dDepthStencilView.Get());
 
+#ifdef TARGET_WINDOWS_DESKTOP
+  // the GUI is blended over the Dolby Vision frame, so it is drawn on transparent black
+  if (m_dolbyVisionOutput.IsCandidate())
+  {
+    const float transparent[4]{};
+    m_deferrContext->ClearRenderTargetView(m_backBufferTex.GetRenderTarget(), transparent);
+  }
+#endif
   return true;
 }
 
@@ -999,6 +1025,11 @@ bool DX::DeviceResources::Begin()
 void DX::DeviceResources::Present()
 {
   FinishCommandList();
+
+#ifdef TARGET_WINDOWS_DESKTOP
+  if (!m_dolbyVisionOutput.Present(*this))
+    return;
+#endif
 
   // The first argument instructs DXGI to block until VSync, putting the application
   // to sleep until the next VSync. This ensures we don't waste any cycles rendering
@@ -1226,9 +1257,16 @@ VideoDriverInfo DX::DeviceResources::GetVideoDriverVersion() const
 void DX::DeviceResources::SetWindow(HWND window)
 {
   m_window = window;
+  m_dolbyVisionOutput.SetWindow(window);
 
   CreateDeviceIndependentResources();
   CreateDeviceResources();
+}
+
+void DX::DeviceResources::RecreateSwapChain()
+{
+  if (m_bDeviceCreated && m_swapChain)
+    CreateWindowSizeDependentResources();
 }
 #elif defined(TARGET_WINDOWS_STORE)
 // This method is called when the CoreWindow is created (or re-created).

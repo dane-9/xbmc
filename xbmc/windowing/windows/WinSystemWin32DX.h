@@ -70,6 +70,7 @@ public:
 
   // HDR OS/display override
   bool IsHDRDisplay() override;
+  CHDRCapabilities GetDisplayHDRCapabilities() const override;
   HDR_STATUS ToggleHDR() override;
   HDR_STATUS GetOSHDRStatus() override;
   KODI::UTILS::Eotf GetEotf() const override;

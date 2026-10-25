@@ -14,6 +14,7 @@
 #include "VideoRenderers/BaseRenderer.h"
 #include "VideoRenderers/RenderFlags.h"
 #include "cores/VideoPlayer/Buffers/VideoBuffer.h"
+#include "rendering/dx/DeviceResources.h"
 #include "rendering/dx/DirectXHelper.h"
 #include "rendering/dx/RenderContext.h"
 #include "settings/SettingUtils.h"
@@ -37,6 +38,17 @@ bool CanRenderDolbyVision()
   return CSettingUtils::FindIntInList(allowedHdrFormats,
                                       CSettings::VIDEOPLAYER_ALLOWED_HDR_TYPE_DOLBY_VISION) &&
          DX::Windowing()->GetDisplayHDRCapabilities().SupportsDolbyVision();
+}
+
+// the Windows desktop Dolby Vision output switches the display itself
+bool IsDolbyVisionOutputCandidate()
+{
+#if defined(TARGET_WINDOWS_DESKTOP)
+  const DX::CDolbyVisionOutput& output = DX::DeviceResources::Get()->GetDolbyVisionOutput();
+  return output.IsCandidate() || output.IsActive();
+#else
+  return false;
+#endif
 }
 
 bool IsHdrStream(const VideoPicture& picture, bool canRenderDolbyVision)
@@ -247,7 +259,7 @@ bool CRendererBase::Configure(const VideoPicture& picture, float fps, unsigned o
 
     const bool streamIsHDR = IsHdrStream(picture, m_canRenderDolbyVision);
 
-    if (streamIsHDR != DX::Windowing()->IsHDROutput())
+    if (!IsDolbyVisionOutputCandidate() && streamIsHDR != DX::Windowing()->IsHDROutput())
       DX::Windowing()->ToggleHDR();
   }
 
@@ -643,6 +655,9 @@ void CRendererBase::StopDolbyVisionOutput(CRenderBuffer* rb)
 
 void CRendererBase::ProcessHDR(CRenderBuffer* rb)
 {
+  if (IsDolbyVisionOutputCandidate())
+    return;
+
 #if defined(TARGET_WINDOWS_STORE)
   // only frames reshaped by the Dolby Vision effect may be output as Dolby Vision, which also
   // needs HDR output

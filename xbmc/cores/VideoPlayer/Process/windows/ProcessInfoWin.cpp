@@ -8,7 +8,10 @@
 
 #include "ProcessInfoWin.h"
 
+#include "ServiceBroker.h"
 #include "cores/VideoPlayer/Process/ProcessInfo.h"
+#include "rendering/dx/DolbyVisionOutput.h"
+#include "windowing/WinSystem.h"
 
 using namespace VIDEOPLAYER;
 
@@ -38,4 +41,15 @@ std::vector<AVPixelFormat> CProcessInfoWin::GetRenderFormats()
     AV_PIX_FMT_P016,
     AV_PIX_FMT_YUV420P16
   };
+}
+
+bool CProcessInfoWin::WantsDolbyVisionRpu()
+{
+  return DX::CDolbyVisionOutput::IsAllowedBySettings() &&
+         CServiceBroker::GetWinSystem()->GetDisplayHDRCapabilities().SupportsDolbyVision();
+}
+
+bool CProcessInfoWin::WantsDolbyVisionEnhancementLayer()
+{
+  return WantsDolbyVisionRpu();
 }

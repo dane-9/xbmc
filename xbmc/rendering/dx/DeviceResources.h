@@ -11,6 +11,9 @@
 #include "DirectXHelper.h"
 #include "HDRStatus.h"
 #include "guilib/D3DResource.h"
+#if defined(TARGET_WINDOWS_DESKTOP)
+#include "DolbyVisionOutput.h"
+#endif
 
 #include <functional>
 #include <memory>
@@ -115,6 +118,11 @@ namespace DX
     HMONITOR GetMonitor() const;
 #if defined(TARGET_WINDOWS_DESKTOP)
     void SetWindow(HWND window);
+    CDolbyVisionOutput& GetDolbyVisionOutput() { return m_dolbyVisionOutput; }
+    /*!
+     * \brief Recreates the swapchain, e.g. after the Dolby Vision output changed its format.
+     */
+    void RecreateSwapChain();
 #elif defined(TARGET_WINDOWS_STORE)
     void Trim() const;
     void SetWindow(const winrt::Windows::UI::Core::CoreWindow& window);
@@ -155,7 +163,9 @@ namespace DX
     void CheckDXVA2SharedDecoderSurfaces();
 
     HWND m_window{ nullptr };
-#if defined(TARGET_WINDOWS_STORE)
+#if defined(TARGET_WINDOWS_DESKTOP)
+    CDolbyVisionOutput m_dolbyVisionOutput;
+#elif defined(TARGET_WINDOWS_STORE)
     winrt::Windows::UI::Core::CoreWindow m_coreWindow = nullptr;
 #endif
     Microsoft::WRL::ComPtr<IDXGIFactory2> m_dxgiFactory;
