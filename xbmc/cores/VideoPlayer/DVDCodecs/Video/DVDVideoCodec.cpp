@@ -50,6 +50,7 @@ void VideoPicture::Reset()
 
   hdrType = StreamHdrType::HDR_TYPE_NONE;
   doviRpu.reset();
+  doviEnhancement.reset();
 
   hasDisplayMetadata = false;
   hasLightMetadata = false;

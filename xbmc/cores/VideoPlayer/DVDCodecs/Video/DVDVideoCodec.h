@@ -80,6 +80,8 @@ public:
   StreamHdrType hdrTypeAlt;
   std::string strDVELType;
   std::shared_ptr<const DoviRpu> doviRpu;
+  // hardware-decoded Dolby Vision Profile 7 enhancement layer of this picture
+  std::shared_ptr<CVideoBuffer> doviEnhancement;
 
   bool hasDisplayMetadata = false;
   AVMasteringDisplayMetadata displayMetadata;

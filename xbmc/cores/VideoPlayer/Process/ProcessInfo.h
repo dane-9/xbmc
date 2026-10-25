@@ -98,6 +98,11 @@ public:
   void GetRenderBuffers(int &queued, int &discard, int &free);
   virtual std::vector<AVPixelFormat> GetRenderFormats();
   virtual bool WantsDolbyVisionRpu() { return false; }
+  /*!
+   * rief Whether the renderer composes the Dolby Vision Profile 7 enhancement layer, so the
+   * codec should decode it.
+   */
+  virtual bool WantsDolbyVisionEnhancementLayer() { return false; }
 
   // player states
   /*!

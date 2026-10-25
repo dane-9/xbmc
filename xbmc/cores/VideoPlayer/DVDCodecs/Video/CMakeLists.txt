@@ -1,11 +1,13 @@
 set(SOURCES AddonVideoCodec.cpp
             DVDVideoCodec.cpp
-            DVDVideoCodecFFmpeg.cpp)
+            DVDVideoCodecFFmpeg.cpp
+            DoviEnhancementDecoder.cpp)
 
 set(HEADERS AddonVideoCodec.h
             DVDVideoCodec.h
             DVDVideoCodecFFmpeg.h
-            DVDVideoPP.h)
+            DVDVideoPP.h
+            DoviEnhancementDecoder.h)
 
 if(TARGET ffmpeg::libpostproc)
   list(APPEND SOURCES DVDVideoPPFFmpeg.cpp)

@@ -105,6 +105,7 @@ protected:
   CDVDCodecOptions m_options;
   bool m_exportDoviRpu = false;
   std::map<int64_t, std::vector<uint8_t>> m_av1DoviRpus; // by packet pts
+  std::unique_ptr<class CDoviEnhancementDecoder> m_doviEnhancement;
 
   struct CDropControl
   {

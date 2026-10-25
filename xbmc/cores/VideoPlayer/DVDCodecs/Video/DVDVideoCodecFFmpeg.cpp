@@ -14,6 +14,7 @@
 #ifdef HAVE_LIBPOSTPROC
 #include "DVDVideoPPFFmpeg.h"
 #endif
+#include "DoviEnhancementDecoder.h"
 #include "ServiceBroker.h"
 #include "cores/FFmpeg.h"
 #include "cores/VideoPlayer/Interface/TimingConstants.h"
@@ -478,6 +479,11 @@ bool CDVDVideoCodecFFmpeg::Open(CDVDStreamInfo &hints, CDVDCodecOptions &options
   m_processInfo.SetVideoDimensions(m_pCodecContext->coded_width, m_pCodecContext->coded_height);
   m_processInfo.SetVideoPixelFormat(pixFmtName ? pixFmtName : "");
 
+  m_doviEnhancement.reset();
+  if (hints.hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION &&
+      m_processInfo.WantsDolbyVisionEnhancementLayer())
+    m_doviEnhancement = CDoviEnhancementDecoder::Create(hints);
+
   m_dropCtrl.Reset(true);
   m_eof = false;
   return true;
@@ -489,6 +495,7 @@ void CDVDVideoCodecFFmpeg::Dispose()
   av_frame_free(&m_pDecodedFrame);
   av_frame_free(&m_pFilterFrame);
   avcodec_free_context(&m_pCodecContext);
+  m_doviEnhancement.reset();
 
   if (m_pHardware)
   {
@@ -639,6 +646,8 @@ bool CDVDVideoCodecFFmpeg::AddData(const DemuxPacket &packet)
   }
 
   int ret = avcodec_send_packet(m_pCodecContext, avpkt);
+  if (m_doviEnhancement && ret != AVERROR(EAGAIN))
+    m_doviEnhancement->Send(packet.pData, packet.iSize, avpkt->pts, avpkt->dts);
 
   //! @todo: properly handle avpkt side_data. this works around our improper use of the side_data
   // as we pass pointers to ffmpeg allocated memory for the side_data. we should really be allocating
@@ -983,6 +992,8 @@ void CDVDVideoCodecFFmpeg::Reset()
   m_eof = false;
   m_iLastKeyframe = m_pCodecContext->has_b_frames;
   avcodec_flush_buffers(m_pCodecContext);
+  if (m_doviEnhancement)
+    m_doviEnhancement->Flush();
   av_frame_unref(m_pFrame);
 
   if (m_pHardware)
@@ -1175,6 +1186,8 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
   }
 
   pVideoPicture->doviRpu.reset();
+  pVideoPicture->doviEnhancement =
+      m_doviEnhancement ? m_doviEnhancement->Take(m_pFrame->pts) : nullptr;
   if (m_exportDoviRpu)
   {
     std::vector<uint8_t> rpu;
