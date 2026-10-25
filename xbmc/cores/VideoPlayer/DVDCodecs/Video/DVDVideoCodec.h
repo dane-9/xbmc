@@ -32,13 +32,15 @@ class CSetting;
 #define FRAME_TYPE_B     3
 #define FRAME_TYPE_D     4
 
-// Dolby Vision RPU for UWP/Xbox Dolby Vision renderer effect
+// Dolby Vision RPU for the Windows Dolby Vision renderers
 struct DoviRpu
 {
   int profile = 0;
   int compatibilityId = 0;
   // whole RPU NAL unit (header, prefix, RPU), emulation prevention bytes removed
   std::vector<uint8_t> data;
+  // the RPU as parsed by FFmpeg (AVDOVIMetadata side data), if available
+  std::vector<uint8_t> metadata;
 };
 
 // should be entirely filled by all codecs

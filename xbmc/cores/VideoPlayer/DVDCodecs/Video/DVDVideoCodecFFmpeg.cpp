@@ -1195,8 +1195,15 @@ bool CDVDVideoCodecFFmpeg::GetPictureCommon(VideoPicture* pVideoPicture)
     }
 
     if (!rpu.empty())
-      pVideoPicture->doviRpu = std::make_shared<DoviRpu>(DoviRpu{
-          m_hints.dovi.dv_profile, m_hints.dovi.dv_bl_signal_compatibility_id, std::move(rpu)});
+    {
+      std::vector<uint8_t> metadata;
+      sd = av_frame_get_side_data(m_pFrame, AV_FRAME_DATA_DOVI_METADATA);
+      if (sd)
+        metadata.assign(sd->data, sd->data + sd->size);
+      pVideoPicture->doviRpu = std::make_shared<DoviRpu>(
+          DoviRpu{m_hints.dovi.dv_profile, m_hints.dovi.dv_bl_signal_compatibility_id,
+                  std::move(rpu), std::move(metadata)});
+    }
   }
 
   if (pVideoPicture->hdrType == StreamHdrType::HDR_TYPE_DOLBYVISION)
