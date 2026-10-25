@@ -96,6 +96,7 @@ public:
   std::string stereoMode;
   uint64_t frameIdx = 0;
   std::shared_ptr<const DoviRpu> doviRpu;
+  std::shared_ptr<::CVideoBuffer> doviEnhancement;
 
 protected:
   CRenderBuffer(AVPixelFormat av_pix_format, unsigned width, unsigned height);

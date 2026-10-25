@@ -67,6 +67,7 @@ void CRenderBuffer::AppendPicture(const VideoPicture& picture)
   stereoMode = picture.stereoMode;
   pixelFormat = picture.pixelFormat;
   doviRpu = picture.doviRpu;
+  doviEnhancement = picture.doviEnhancement;
 
   hasDisplayMetadata = picture.hasDisplayMetadata;
   displayMetadata = picture.displayMetadata;
@@ -82,6 +83,7 @@ void CRenderBuffer::ReleasePicture()
     videoBuffer->Release();
   videoBuffer = nullptr;
   doviRpu.reset();
+  doviEnhancement.reset();
   m_bLoaded = false;
 }
 
